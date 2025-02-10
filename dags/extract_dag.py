@@ -6,6 +6,9 @@ import yaml
 import os
 import json
 from api_manager import APIManager
+import logging
+
+logger = logging.getLogger(__name__)
 
 def load_endpoints_config():
     """Carrega configuração dos endpoints"""
@@ -27,27 +30,30 @@ def extract_data(endpoint: str, **context):
         access_token=access_token
     )
     
-    # Tenta extrair primeira página
+    all_data = []
+    
     try:
-        data = api_manager.make_request(
+        # Itera sobre todas as páginas
+        for page in api_manager.paginate(
             endpoint=resource_config['endpoint'],
-            method='GET',
-            params={'skip': 0, 'limit': resource_config['limit']}
-        )
+            limit=resource_config['limit']
+        ):
+            all_data.extend(page)
+            logger.info(f"Extraídos {len(page)} registros de {endpoint}")
         
-        # Log para debug
-        print(f"Dados extraídos de {endpoint}: {data}")
+        # Log do total
+        logger.info(f"Total de {len(all_data)} registros extraídos de {endpoint}")
         
-        # Guarda resultado no XCom para debug
+        # Guarda resultado no XCom
         context['task_instance'].xcom_push(
-            key=f'{endpoint}_first_page',
-            value=data
+            key=f'{endpoint}_total_records',
+            value=len(all_data)
         )
         
-        return data
+        return all_data
         
     except Exception as e:
-        print(f"Erro ao extrair dados de {endpoint}: {str(e)}")
+        logger.error(f"Erro ao extrair dados de {endpoint}: {str(e)}")
         raise
 
 default_args = {

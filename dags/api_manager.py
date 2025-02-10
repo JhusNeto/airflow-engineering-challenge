@@ -91,3 +91,35 @@ class APIManager:
                 break
                 
             skip += limit
+
+    def paginate(self, endpoint: str, limit: int = 50) -> Generator[List[Dict], None, None]:
+        """
+        Gerador que itera sobre todas as páginas de dados
+        
+        Args:
+            endpoint: Endpoint da API
+            limit: Limite de registros por página (max 50)
+            
+        Yields:
+            Lista de registros de cada página
+        """
+        skip = 0
+        
+        while True:
+            logger.info(f"Buscando dados de {endpoint} (skip={skip}, limit={limit})")
+            
+            data = self.make_request(
+                endpoint=endpoint,
+                method='GET',
+                params={'skip': skip, 'limit': limit}
+            )
+            
+            if not data:  # Página vazia
+                break
+                
+            yield data
+            
+            if len(data) < limit:  # Última página
+                break
+                
+            skip += limit
