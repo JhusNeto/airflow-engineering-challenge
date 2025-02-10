@@ -1,0 +1,8 @@
+api:
+  base_url: "http://api:8000"
+  auth:
+    token_endpoint: "/token"
+    refresh_endpoint: "/refresh-token"
+    username: "admin"
+    password: "admin"
+    token_expiry_minutes: 30 
