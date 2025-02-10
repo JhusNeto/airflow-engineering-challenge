@@ -35,6 +35,7 @@ from tenacity import (
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 from functools import wraps
+from api_manager import APIManager
 
 logger = logging.getLogger(__name__)
 
@@ -152,17 +153,24 @@ def load_config() -> AuthConfig:
 def get_token(**context) -> Dict[str, str]:
     """Task para obtenção inicial de tokens"""
     config = load_config()
-    token_manager = TokenManager(config)
+    api_manager = APIManager(config.base_url, None)  # Inicialmente sem token
     
     try:
-        tokens = token_manager.get_initial_tokens()
+        # Usa o APIManager para fazer a requisição
+        tokens = api_manager.make_request(
+            endpoint=config.token_endpoint,
+            method='POST',
+            data={
+                "username": config.username,
+                "password": config.password
+            }
+        )
         
-        # Armazena tokens com serialização JSON
+        # O resto permanece igual
         Variable.set("access_token", tokens['access_token'], serialize_json=True)
         Variable.set("refresh_token", tokens['refresh_token'], serialize_json=True)
         Variable.set("token_timestamp", str(datetime.now()), serialize_json=True)
         
-        # Registra sucesso via XCom
         context['task_instance'].xcom_push(
             key='auth_status',
             value={'success': True, 'timestamp': str(datetime.now())}
