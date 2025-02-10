@@ -7,6 +7,7 @@ import os
 import json
 from api_manager import APIManager
 import logging
+from storage.raw_manager import RawStorageManager
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def extract_data(endpoint: str, **context):
     all_data = []
     
     try:
-        # Itera sobre todas as páginas
+        # Extrai dados
         for page in api_manager.paginate(
             endpoint=resource_config['endpoint'],
             limit=resource_config['limit']
@@ -41,13 +42,18 @@ def extract_data(endpoint: str, **context):
             all_data.extend(page)
             logger.info(f"Extraídos {len(page)} registros de {endpoint}")
         
-        # Log do total
-        logger.info(f"Total de {len(all_data)} registros extraídos de {endpoint}")
+        # Salva na camada Raw
+        raw_manager = RawStorageManager()
+        raw_filepath = raw_manager.save_json(all_data, endpoint)
         
-        # Guarda resultado no XCom
+        # XCom metadata
         context['task_instance'].xcom_push(
-            key=f'{endpoint}_total_records',
-            value=len(all_data)
+            key=f'{endpoint}_metadata',
+            value={
+                'total_records': len(all_data),
+                'raw_filepath': raw_filepath,
+                'timestamp': datetime.now().isoformat()
+            }
         )
         
         return all_data
@@ -55,6 +61,41 @@ def extract_data(endpoint: str, **context):
     except Exception as e:
         logger.error(f"Erro ao extrair dados de {endpoint}: {str(e)}")
         raise
+
+def save_raw_data(data: list, endpoint: str, **context) -> str:
+    """
+    Salva dados brutos em JSON na camada Raw
+    
+    Args:
+        data: Lista de registros a serem salvos
+        endpoint: Nome do endpoint (products, carts, etc)
+        
+    Returns:
+        Caminho do arquivo salvo
+    """
+    # Cria estrutura de diretórios
+    date_path = datetime.now().strftime('%Y-%m-%d')
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    base_path = os.path.join(
+        os.path.dirname(__file__), 
+        '../local_storage/raw',
+        endpoint,
+        date_path
+    )
+    
+    os.makedirs(base_path, exist_ok=True)
+    
+    # Define nome do arquivo
+    filename = f"{endpoint}_{timestamp}.json"
+    filepath = os.path.join(base_path, filename)
+    
+    # Salva dados
+    with open(filepath, 'w') as f:
+        json.dump(data, f, indent=2)
+    
+    logger.info(f"Dados salvos em: {filepath}")
+    return filepath
 
 default_args = {
     'owner': 'airflow',
