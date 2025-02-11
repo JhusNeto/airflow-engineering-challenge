@@ -245,6 +245,7 @@ services:
       pip install 'dbt-core==1.5.9' &&
       pip install 'dbt-postgres==1.5.9' &&
       cd /opt/airflow/dbt &&
+      dbt deps &&
       dbt docs generate &&
       dbt docs serve --port 8085"
     ports:
