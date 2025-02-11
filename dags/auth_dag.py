@@ -2,12 +2,17 @@
 DAG de Autenticação para API de E-commerce
 -----------------------------------------
 Responsável pelo gerenciamento de tokens JWT, implementando:
-- Autenticação inicial
-- Refresh automático
-- Tratamento robusto de erros
-- Retry exponencial
-- Observabilidade completa
-- Documentação detalhada
+- Autenticação inicial com credenciais
+- Refresh automático de tokens antes da expiração
+- Tratamento robusto de erros com retry exponencial
+- Observabilidade completa com logs detalhados
+- Armazenamento seguro em variáveis do Airflow
+
+Fluxo principal:
+1. Obtém tokens iniciais via credenciais
+2. Armazena tokens nas variáveis do Airflow
+3. Monitora validade e renova automaticamente
+4. Em caso de falha no refresh, volta para autenticação inicial
 
 Autor: [Seu Nome]
 Data: [Data Atual]
@@ -37,11 +42,22 @@ from dataclasses import dataclass
 from functools import wraps
 from api_manager import APIManager
 
+# Configuração do logger para a DAG
 logger = logging.getLogger(__name__)
 
 @dataclass
 class AuthConfig:
-    """Classe para validação da configuração de autenticação"""
+    """
+    Classe para validação e armazenamento da configuração de autenticação.
+    
+    Atributos:
+        base_url: URL base da API
+        token_endpoint: Endpoint para obtenção de tokens
+        refresh_endpoint: Endpoint para renovação de tokens
+        username: Usuário para autenticação
+        password: Senha para autenticação
+        token_expiry_minutes: Tempo de validade do token em minutos
+    """
     base_url: str
     token_endpoint: str
     refresh_endpoint: str
@@ -50,7 +66,14 @@ class AuthConfig:
     token_expiry_minutes: int = 30
 
 def log_function_call(func):
-    """Decorator para logging de funções"""
+    """
+    Decorator para logging automático de entrada e saída de funções.
+    
+    Registra:
+    - Início da execução
+    - Fim com sucesso
+    - Erros ocorridos
+    """
     @wraps(func)
     def wrapper(*args, **kwargs):
         logger.info(f"Iniciando execução de {func.__name__}")
@@ -64,9 +87,23 @@ def log_function_call(func):
     return wrapper
 
 class TokenManager:
-    """Classe para gerenciamento de tokens"""
+    """
+    Gerenciador de tokens de autenticação.
+    
+    Responsável por:
+    - Fazer requisições à API com retry
+    - Obter tokens iniciais
+    - Renovar tokens
+    - Tratar erros de forma robusta
+    """
     
     def __init__(self, config: AuthConfig):
+        """
+        Inicializa o gerenciador com as configurações necessárias.
+        
+        Args:
+            config: Instância de AuthConfig com as configurações
+        """
         self.config = config
     
     @retry(
@@ -83,15 +120,15 @@ class TokenManager:
         **kwargs
     ) -> Dict[str, Any]:
         """
-        Realiza requisições à API com retry exponencial
+        Realiza requisições à API com retry exponencial em caso de falhas.
         
         Args:
-            method: Método HTTP
-            endpoint: Endpoint da API
-            **kwargs: Argumentos adicionais para requests
+            method: Método HTTP (GET, POST etc)
+            endpoint: Caminho do endpoint
+            **kwargs: Argumentos adicionais para a requisição
             
         Returns:
-            Dict com resposta da API
+            Dict com a resposta da API
             
         Raises:
             AirflowException: Em caso de falha após todas as tentativas
@@ -112,7 +149,12 @@ class TokenManager:
 
     @log_function_call
     def get_initial_tokens(self) -> Dict[str, str]:
-        """Obtém par inicial de tokens"""
+        """
+        Obtém par inicial de tokens via credenciais.
+        
+        Returns:
+            Dict contendo access_token e refresh_token
+        """
         return self.make_api_request(
             'POST',
             self.config.token_endpoint,
@@ -124,7 +166,15 @@ class TokenManager:
 
     @log_function_call
     def refresh_access_token(self, refresh_token: str) -> Dict[str, str]:
-        """Renova token de acesso"""
+        """
+        Renova token de acesso usando refresh token.
+        
+        Args:
+            refresh_token: Token de refresh válido
+            
+        Returns:
+            Dict com novos tokens
+        """
         return self.make_api_request(
             'POST',
             self.config.refresh_endpoint,
@@ -132,7 +182,15 @@ class TokenManager:
         )
 
 def load_config() -> AuthConfig:
-    """Carrega e valida configurações do YAML"""
+    """
+    Carrega e valida configurações do arquivo YAML.
+    
+    Returns:
+        Instância de AuthConfig com as configurações validadas
+        
+    Raises:
+        AirflowException: Se houver erro ao carregar/validar configurações
+    """
     try:
         config_path = os.path.join(os.path.dirname(__file__), '../config/auth_config.yaml')
         with open(config_path) as f:
@@ -151,7 +209,25 @@ def load_config() -> AuthConfig:
         raise AirflowException(f"Falha ao carregar configuração: {str(e)}")
 
 def get_token(**context) -> Dict[str, str]:
-    """Task para obtenção inicial de tokens"""
+    """
+    Task para obtenção inicial de tokens.
+    
+    Fluxo:
+    1. Carrega configurações
+    2. Inicializa APIManager
+    3. Faz requisição de autenticação
+    4. Armazena tokens nas variáveis
+    5. Registra status via XCom
+    
+    Args:
+        **context: Contexto do Airflow
+        
+    Returns:
+        Dict com os tokens obtidos
+        
+    Raises:
+        AirflowException: Em caso de falha na autenticação
+    """
     config = load_config()
     api_manager = APIManager(config.base_url, None)  # Inicialmente sem token
     
@@ -166,7 +242,7 @@ def get_token(**context) -> Dict[str, str]:
             }
         )
         
-        # O resto permanece igual
+        # Armazena tokens nas variáveis do Airflow
         Variable.set("access_token", tokens['access_token'], serialize_json=True)
         Variable.set("refresh_token", tokens['refresh_token'], serialize_json=True)
         Variable.set("token_timestamp", str(datetime.now()), serialize_json=True)
@@ -185,7 +261,21 @@ def get_token(**context) -> Dict[str, str]:
         raise
 
 def refresh_token(**context) -> Dict[str, str]:
-    """Task para renovação de token"""
+    """
+    Task para renovação de token.
+    
+    Fluxo:
+    1. Verifica validade do token atual
+    2. Se necessário, tenta renovar usando refresh token
+    3. Em caso de falha, tenta nova autenticação
+    4. Atualiza variáveis e registra status
+    
+    Args:
+        **context: Contexto do Airflow
+        
+    Returns:
+        Dict com status da operação ou novos tokens
+    """
     config = load_config()
     token_manager = TokenManager(config)
     
@@ -215,7 +305,7 @@ def refresh_token(**context) -> Dict[str, str]:
         logger.warning(f"Falha no refresh, tentando nova autenticação: {str(e)}")
         return get_token(**context)
 
-# Configurações da DAG
+# Configurações padrão da DAG
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
