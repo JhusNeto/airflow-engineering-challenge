@@ -1,52 +1,66 @@
--- Objetivo:
--- Calcular métricas de RFM (Recência, Frequência e Valor Monetário) para cada cliente,
--- permitindo identificar os clientes mais valiosos e seu comportamento de compra.
--- 
--- Recência: Tempo desde a última compra
--- Frequência: Quantidade total de compras
--- Monetário: Valor total gasto em compras
+/*
+Modelo: Customer RFM (Recency, Frequency, Monetary)
+
+Objetivo: 
+Calcular métricas RFM para segmentação e análise do valor dos clientes.
+
+Métricas calculadas:
+- Recência (R): Número de dias desde a última compra do cliente
+- Frequência (F): Quantidade total de compras realizadas pelo cliente
+- Monetário (M): Valor total gasto pelo cliente em todas as compras
+
+Tabelas fonte:
+- stage.carts: Dados dos pedidos/carrinhos
+- stage.customers: Dados cadastrais dos clientes
+
+Regras de negócio:
+- Considera apenas pedidos com status 'DELIVERED'
+- Recência calculada em dias usando a data atual como referência
+- Ordenação final por valor monetário (clientes mais valiosos primeiro)
+*/
 
 {{ config(materialized='table') }}
 
--- Obtemos os pedidos (carrinhos) com status 'DELIVERED'
+-- CTE para filtrar apenas pedidos entregues e selecionar campos relevantes
 with orders as (
     select 
         customer_id,
         sale_date,
         total_amount
     from {{ source('stage', 'carts') }}
-    where lower(status) = 'delivered'
+    where lower(status) = 'delivered'  -- Filtra apenas pedidos entregues
 ),
 
--- Agregamos para calcular a última compra, quantidade de pedidos e total gasto
+-- CTE para calcular as métricas base do RFM por cliente
 rfm as (
     select 
         customer_id,
-        max(sale_date) as last_purchase,
-        count(*) as frequency,
-        sum(total_amount) as monetary
+        max(sale_date) as last_purchase,    -- Data da compra mais recente
+        count(*) as frequency,              -- Total de compras
+        sum(total_amount) as monetary       -- Valor total gasto
     from orders
     group by customer_id
 ),
 
--- Calculamos a recência com base na data atual (a execução pode ser parametrizada)
+-- CTE para adicionar o cálculo de recência em dias
 rfm_calculated as (
     select
         customer_id,
         last_purchase,
         frequency,
         monetary,
-        date_part('day', current_date - last_purchase) as recency
+        date_part('day', current_date - last_purchase) as recency  -- Dias desde última compra
     from rfm
 )
 
+-- Query final combinando métricas RFM com dados do cliente
 select 
-    c.id as customer_id,
-    c.full_name,
-    c.email,
-    r.recency,
-    r.frequency,
-    r.monetary
+    c.id as customer_id,     -- ID único do cliente
+    c.full_name,             -- Nome completo
+    c.email,                 -- Email para contato
+    r.recency,              -- Dias desde última compra
+    r.frequency,            -- Número total de compras
+    r.monetary              -- Valor total gasto
 from rfm_calculated r
 left join {{ source('stage', 'customers') }} c on r.customer_id = c.id
-order by r.monetary desc
+order by r.monetary desc     -- Ordena por valor gasto (maior para menor)
