@@ -1,0 +1,8 @@
+carts:
+  table: "stage.carts"
+customers:
+  table: "stage.customers"
+logistics:
+  table: "stage.logistics"
+products:
+  table: "stage.products"
