@@ -253,3 +253,6 @@ A implementação demonstra conhecimentos práticos em:
 - DevOps e containerização
 
 O código está disponível para análise e pode ser usado como referência para projetos similares, respeitando as devidas atribuições.
+
+**Desenvolvido por:**
+[Juscelino Barbosa da Silva Neto](https://www.linkedin.com/in/juscelinobarbosa/)
