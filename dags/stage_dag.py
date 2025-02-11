@@ -66,7 +66,7 @@ with DAG(
     'stage_dag',
     default_args=default_args,
     description='Transforma dados da camada Raw para Stage com flattening dinâmico e colunas de controle',
-    schedule_interval=timedelta(hours=1),  # Executa a cada 1 hora
+    schedule_interval='@hourly',  # Executa a cada 1 hora
     start_date=datetime(2024, 1, 1),
     catchup=False,  # Não executa DAGs passadas
     tags=['stage', 'transform', 'ecommerce']

@@ -139,7 +139,7 @@ with DAG(
     'extract_data_dag',
     default_args=default_args,
     description='Extrai dados da API de e-commerce e salva na camada Raw',
-    schedule_interval=timedelta(hours=1),
+    schedule_interval='@hourly',
     start_date=datetime(2024, 1, 1),
     catchup=False,
     tags=['extract', 'api', 'ecommerce'],
