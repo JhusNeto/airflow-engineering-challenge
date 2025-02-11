@@ -234,17 +234,26 @@ services:
     user: "0:0"
     volumes:
       - ${AIRFLOW_PROJ_DIR:-.}:/sources
-  dbt:
-    image: python:3.9-slim
-    container_name: dbt
-    working_dir: /opt/airflow/dbt
-    volumes:
-      - ${AIRFLOW_PROJ_DIR:-.}/dbt:/opt/airflow/dbt
-      - ${AIRFLOW_PROJ_DIR:-.}/.dbt:/home/airflow/.dbt
-    command: bash -c "apt-get update && apt-get install -y git && pip install --upgrade 'protobuf>5.0.0' && pip install dbt-postgres && dbt debug && dbt run"
+
+  dbt-docs:
+    container_name: dbt-docs
+    <<: *airflow-common
+    command: >
+      bash -c "
+      pip install --upgrade pip &&
+      pip install 'protobuf<4.0.0' &&
+      pip install 'dbt-core==1.5.9' &&
+      pip install 'dbt-postgres==1.5.9' &&
+      cd /opt/airflow/dbt &&
+      dbt docs generate &&
+      dbt docs serve --port 8085"
+    ports:
+      - "8085:8085"
+    restart: always
     depends_on:
-      postgresdb:
-        condition: service_healthy
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
