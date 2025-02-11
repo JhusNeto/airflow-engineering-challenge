@@ -19,9 +19,20 @@ with DAG(
     tags=['dbt', 'trusted']
 ) as dag:
 
-    dbt_run = BashOperator(
-        task_id='dbt_run',
+    transform_data = BashOperator(
+        task_id='transform_data',
         bash_command='cd /opt/airflow/dbt && dbt run'
     )
 
-    dbt_run
+    validate_transformation = BashOperator(
+        task_id='validate_transformation',
+        bash_command='cd /opt/airflow/dbt && dbt test'
+    )
+
+    generate_documentation = BashOperator(
+        task_id='generate_documentation',
+        bash_command='cd /opt/airflow/dbt && dbt docs generate'
+    )
+
+    # Define o fluxo de execução das tarefas
+    transform_data >> validate_transformation >> generate_documentation
