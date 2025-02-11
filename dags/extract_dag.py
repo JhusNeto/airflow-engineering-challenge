@@ -109,17 +109,19 @@ default_args = {
 with DAG(
     'extract_data_dag',
     default_args=default_args,
-    description='Extrai dados da API de E-commerce',
+    description='Extrai dados da API',
     schedule_interval=timedelta(hours=1),
     start_date=datetime(2024, 1, 1),
     catchup=False,
     tags=['extract', 'api', 'ecommerce'],
 ) as dag:
     
-    # Cria tasks dinamicamente para cada endpoint
+    # Tasks de extração
+    extract_tasks = []
     for endpoint in load_endpoints_config()['resources'].keys():
         extract_task = PythonOperator(
             task_id=f'extract_{endpoint}',
             python_callable=extract_data,
             op_kwargs={'endpoint': endpoint}
-        ) 
+        )
+        extract_tasks.append(extract_task) 
