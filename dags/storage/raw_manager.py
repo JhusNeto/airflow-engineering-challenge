@@ -56,8 +56,28 @@ class RawStorageManager:
         return filepath
         
     def get_latest_file(self, endpoint: str) -> str:
-        """Retorna o caminho do arquivo mais recente de um endpoint"""
-        pass
+        """Retorna o arquivo mais recente de um endpoint"""
+        base_path = os.path.join(self.base_path, endpoint)
+        
+        if not os.path.exists(base_path):
+            return None
+            
+        # Lista todas as datas
+        dates = sorted(os.listdir(base_path), reverse=True)
+        if not dates:
+            return None
+            
+        # Pega pasta mais recente
+        latest_date = dates[0]
+        date_path = os.path.join(base_path, latest_date)
+        
+        # Lista arquivos da data mais recente
+        files = sorted(os.listdir(date_path), reverse=True)
+        if not files:
+            return None
+            
+        # Retorna arquivo mais recente
+        return os.path.join(date_path, files[0])
         
     def list_files(self, endpoint: str, date: str = None) -> List[str]:
         """Lista arquivos de um endpoint/data específicos"""
