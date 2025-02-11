@@ -9,23 +9,42 @@ from api_manager import APIManager
 import logging
 from storage.raw_manager import RawStorageManager
 
+# Configuração do logger para a DAG
 logger = logging.getLogger(__name__)
 
 def load_endpoints_config():
-    """Carrega configuração dos endpoints"""
+    """
+    Carrega a configuração dos endpoints da API a partir do arquivo YAML.
+    
+    Returns:
+        Dict: Configuração dos endpoints contendo recursos e seus parâmetros
+    """
     config_path = os.path.join(os.path.dirname(__file__), '../config/endpoints.yaml')
     with open(config_path) as f:
         return yaml.safe_load(f)
 
 def extract_data(endpoint: str, **context):
-    """Extrai dados de um endpoint específico"""
+    """
+    Extrai dados de um endpoint específico da API e salva na camada Raw.
+    
+    Args:
+        endpoint: Nome do endpoint para extração (ex: products, carts)
+        **context: Contexto do Airflow para XCom
+        
+    Returns:
+        List: Dados extraídos do endpoint
+        
+    Raises:
+        Exception: Em caso de erro na extração ou salvamento
+    """
+    # Carrega configurações do endpoint
     config = load_endpoints_config()
     resource_config = config['resources'][endpoint]
     
-    # Obtém token de acesso
+    # Obtém token de acesso das variáveis do Airflow
     access_token = Variable.get("access_token", deserialize_json=True)
     
-    # Inicializa APIManager
+    # Inicializa gerenciador de API com autenticação
     api_manager = APIManager(
         base_url="http://api:8000",
         access_token=access_token
@@ -34,7 +53,7 @@ def extract_data(endpoint: str, **context):
     all_data = []
     
     try:
-        # Extrai dados
+        # Extrai dados com paginação
         for page in api_manager.paginate(
             endpoint=resource_config['endpoint'],
             limit=resource_config['limit']
@@ -42,11 +61,11 @@ def extract_data(endpoint: str, **context):
             all_data.extend(page)
             logger.info(f"Extraídos {len(page)} registros de {endpoint}")
         
-        # Salva na camada Raw
+        # Salva dados na camada Raw usando o gerenciador
         raw_manager = RawStorageManager()
         raw_filepath = raw_manager.save_json(all_data, endpoint)
         
-        # XCom metadata
+        # Registra metadados via XCom para downstream tasks
         context['task_instance'].xcom_push(
             key=f'{endpoint}_metadata',
             value={
@@ -64,16 +83,24 @@ def extract_data(endpoint: str, **context):
 
 def save_raw_data(data: list, endpoint: str, **context) -> str:
     """
-    Salva dados brutos em JSON na camada Raw
+    Salva dados brutos em formato JSON na camada Raw do data lake.
+    
+    Estrutura de diretórios:
+    local_storage/
+        raw/
+            {endpoint}/
+                {date}/
+                    {endpoint}_{timestamp}.json
     
     Args:
         data: Lista de registros a serem salvos
         endpoint: Nome do endpoint (products, carts, etc)
+        **context: Contexto do Airflow
         
     Returns:
-        Caminho do arquivo salvo
+        str: Caminho completo do arquivo JSON salvo
     """
-    # Cria estrutura de diretórios
+    # Cria estrutura de diretórios por data
     date_path = datetime.now().strftime('%Y-%m-%d')
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     
@@ -86,17 +113,18 @@ def save_raw_data(data: list, endpoint: str, **context) -> str:
     
     os.makedirs(base_path, exist_ok=True)
     
-    # Define nome do arquivo
+    # Define nome do arquivo com timestamp
     filename = f"{endpoint}_{timestamp}.json"
     filepath = os.path.join(base_path, filename)
     
-    # Salva dados
+    # Salva dados em JSON formatado
     with open(filepath, 'w') as f:
         json.dump(data, f, indent=2)
     
     logger.info(f"Dados salvos em: {filepath}")
     return filepath
 
+# Configurações padrão da DAG
 default_args = {
     'owner': 'airflow',
     'depends_on_past': False,
@@ -106,17 +134,18 @@ default_args = {
     'retry_delay': timedelta(seconds=30)
 }
 
+# Definição da DAG
 with DAG(
     'extract_data_dag',
     default_args=default_args,
-    description='Extrai dados da API',
+    description='Extrai dados da API de e-commerce e salva na camada Raw',
     schedule_interval=timedelta(hours=1),
     start_date=datetime(2024, 1, 1),
     catchup=False,
     tags=['extract', 'api', 'ecommerce'],
 ) as dag:
     
-    # Tasks de extração
+    # Cria tasks de extração para cada endpoint configurado
     extract_tasks = []
     for endpoint in load_endpoints_config()['resources'].keys():
         extract_task = PythonOperator(
@@ -124,4 +153,4 @@ with DAG(
             python_callable=extract_data,
             op_kwargs={'endpoint': endpoint}
         )
-        extract_tasks.append(extract_task) 
+        extract_tasks.append(extract_task)
