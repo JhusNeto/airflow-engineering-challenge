@@ -35,3 +35,6 @@ htmlcov/
 
 # Ignore logs
 logs/
+
+# Ignore local_storage directories
+local_storage/*/
