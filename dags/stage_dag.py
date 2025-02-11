@@ -22,7 +22,7 @@ def process_stage(endpoint: str, **context):
     Task que:
       1. Busca o arquivo RAW mais recente para o endpoint.
       2. Carrega a configuração Stage.
-      3. Processa o endpoint: achata, cria/altera a tabela e insere os registros.
+      3. Processa o endpoint: achata, cria/altera a tabela, adiciona colunas de controle e insere os registros.
     """
     raw_manager = RawStorageManager()
     raw_file = raw_manager.get_latest_file(endpoint)
@@ -30,14 +30,14 @@ def process_stage(endpoint: str, **context):
         raise Exception(f"Arquivo RAW para {endpoint} não encontrado")
     
     stage_config = load_stage_config()
-    result = process_endpoint(endpoint, raw_file, stage_config)
+    result = process_endpoint(endpoint, raw_file, stage_config, **context)
     context['task_instance'].xcom_push(key=f'{endpoint}_stage', value=result)
     return result
 
 with DAG(
     'stage_dag',
     default_args=default_args,
-    description='Transforma dados da camada Raw para Stage com flattening dinâmico',
+    description='Transforma dados da camada Raw para Stage com flattening dinâmico e colunas de controle',
     schedule_interval=timedelta(hours=1),
     start_date=datetime(2024, 1, 1),
     catchup=False,
@@ -51,6 +51,7 @@ with DAG(
         task = PythonOperator(
             task_id=f'process_{ep}_stage',
             python_callable=process_stage,
-            op_kwargs={'endpoint': ep}
+            op_kwargs={'endpoint': ep},
+            provide_context=True
         )
         tasks[ep] = task
