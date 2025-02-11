@@ -4,8 +4,153 @@ sources:
   - name: stage
     database: ecommerce
     schema: stage
+    description: "Dados brutos do e-commerce vindos do sistema transacional"
     tables:
       - name: carts
+        description: "Dados dos pedidos e carrinhos de compra"
+        columns:
+          - name: id
+            description: "ID único do pedido"
+            tests:
+              - unique
+              - not_null
+          - name: customer_id
+            description: "ID do cliente que fez o pedido"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('stage', 'customers')
+                  field: id
+          - name: status
+            description: "Status do pedido"
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['DELIVERED', 'PENDING', 'CANCELLED', 'SHIPPED', 'APPROVED']
+          - name: sale_date
+            description: "Data da venda"
+            tests:
+              - not_null
+          - name: created_at
+            description: "Data de criação do registro"
+          - name: etl_load_date
+            description: "Data de carregamento no ETL"
+          - name: etl_run_id
+            description: "ID da execução do ETL"
+          - name: items_discount
+            description: "Valor total dos descontos dos itens"
+          - name: items_line_total
+            description: "Valor total dos itens sem desconto"
+          - name: items_product_id
+            description: "ID dos produtos no pedido"
+          - name: items_product_name
+            description: "Nome dos produtos no pedido"
+          - name: items_quantity
+            description: "Quantidade de cada item"
+          - name: items_unit_price
+            description: "Preço unitário de cada item"
+          - name: logistic_id
+            description: "ID da transportadora"
+          - name: payment_info_boleto_number
+            description: "Número do boleto quando aplicável"
+          - name: payment_info_card_last4
+            description: "Últimos 4 dígitos do cartão quando aplicável"
+          - name: payment_info_installments
+            description: "Número de parcelas do pagamento"
+          - name: payment_info_method
+            description: "Método de pagamento utilizado"
+          - name: payment_info_paypal_id
+            description: "ID do PayPal quando aplicável"
+          - name: payment_info_pix_key
+            description: "Chave PIX quando aplicável"
+          - name: shipping_info_carrier
+            description: "Nome da transportadora"
+          - name: shipping_info_tracking_history_status
+            description: "Status atual do rastreamento"
+          - name: shipping_info_tracking_history_updated_at
+            description: "Data da última atualização do rastreamento"
+          - name: shipping_info_tracking_number
+            description: "Número de rastreamento"
+          - name: source_file
+            description: "Arquivo fonte dos dados"
+          - name: total_amount
+            description: "Valor total do pedido"
+
       - name: products
+        description: "Catálogo de produtos"
+        columns:
+          - name: id
+            description: "ID único do produto"
+            tests:
+              - unique
+              - not_null
+          - name: category
+            description: "Categoria do produto"
+            tests:
+              - not_null
+          - name: name
+            description: "Nome do produto"
+          - name: price
+            description: "Preço do produto"
+          - name: created_at
+            description: "Data de criação do registro"
+          - name: etl_load_date
+            description: "Data de carregamento no ETL"
+          - name: etl_run_id
+            description: "ID da execução do ETL"
+          - name: source_file
+            description: "Arquivo fonte dos dados"
+
       - name: logistics
+        description: "Dados das transportadoras e entregas"
+        columns:
+          - name: id
+            description: "ID único da transportadora"
+            tests:
+              - unique
+              - not_null
+          - name: company_name
+            description: "Nome da empresa transportadora"
+            tests:
+              - not_null
+          - name: contact_phone
+            description: "Telefone de contato da transportadora"
+          - name: created_at
+            description: "Data de criação do registro"
+          - name: etl_load_date
+            description: "Data de carregamento no ETL"
+          - name: etl_run_id
+            description: "ID da execução do ETL"
+          - name: origin_warehouse
+            description: "Armazém de origem"
+          - name: service_type
+            description: "Tipo de serviço oferecido"
+          - name: source_file
+            description: "Arquivo fonte dos dados"
+
       - name: customers
+        description: "Dados cadastrais dos clientes"
+        columns:
+          - name: id
+            description: "ID único do cliente"
+            tests:
+              - unique
+              - not_null
+          - name: email
+            description: "Email do cliente"
+          - name: address
+            description: "Endereço do cliente"
+          - name: city
+            description: "Cidade do cliente"
+          - name: created_at
+            description: "Data de criação do registro"
+          - name: etl_load_date
+            description: "Data de carregamento no ETL"
+          - name: etl_run_id
+            description: "ID da execução do ETL"
+          - name: full_name
+            description: "Nome completo do cliente"
+          - name: phone
+            description: "Telefone do cliente"
+          - name: source_file
+            description: "Arquivo fonte dos dados"
