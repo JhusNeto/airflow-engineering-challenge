@@ -19,7 +19,10 @@ Regras de negócio:
 - Ordenação final por valor monetário (clientes mais valiosos primeiro)
 */
 
-{{ config(materialized='table') }}
+{{ config(
+    materialized='table',
+    unique_key='customer_id'
+) }}
 
 -- CTE para filtrar apenas pedidos entregues e selecionar campos relevantes
 with orders as (
@@ -55,12 +58,12 @@ rfm_calculated as (
 
 -- Query final combinando métricas RFM com dados do cliente
 select 
-    c.id as customer_id,     -- ID único do cliente
+    c.id as customer_id,     -- ID único do cliente (PK)
     c.full_name,             -- Nome completo
     c.email,                 -- Email para contato
     r.recency,              -- Dias desde última compra
     r.frequency,            -- Número total de compras
     r.monetary              -- Valor total gasto
 from rfm_calculated r
-left join {{ source('stage', 'customers') }} c on r.customer_id = c.id
+inner join {{ source('stage', 'customers') }} c on r.customer_id = c.id  -- Garante integridade referencial
 order by r.monetary desc     -- Ordena por valor gasto (maior para menor)

@@ -18,7 +18,10 @@ Regras de negócio:
 - Ordenação por tempo médio de entrega (mais rápidos primeiro)
 */
 
-{{ config(materialized='table') }}
+{{ config(
+    materialized='table',
+    unique_key='logistic_id'
+) }}
 
 -- CTE para extrair dados relevantes de entregas concluídas
 with shipments as (
@@ -28,6 +31,7 @@ with shipments as (
         shipping_info_tracking_history_updated_at::timestamp as delivery_date  -- Converte data de entrega para timestamp
     from {{ source('stage', 'carts') }}
     where lower(status) = 'delivered'  -- Filtra apenas entregas concluídas
+    and logistic_id is not null  -- Garante integridade referencial
 ),
 
 -- CTE para calcular o tempo de entrega em dias para cada envio
@@ -41,12 +45,12 @@ shipping_times as (
 
 -- Query final agregando métricas por transportadora e tipo de serviço
 select
-    l.id as logistic_id,              -- ID único da transportadora
+    l.id as logistic_id,              -- ID único da transportadora (PK)
     l.company_name,                    -- Nome da empresa transportadora
     l.service_type,                    -- Tipo de serviço oferecido
     round(avg(s.delivery_days)::numeric, 2) as avg_delivery_days,  -- Tempo médio de entrega
     count(*) as num_shipments          -- Total de entregas realizadas
-from shipping_times s
-join {{ source('stage', 'logistics') }} l on s.logistic_id = l.id
+from {{ source('stage', 'logistics') }} l  -- Tabela principal para garantir todas as transportadoras
+left join shipping_times s on s.logistic_id = l.id  -- Left join para manter transportadoras sem entregas
 group by l.id, l.company_name, l.service_type
 order by avg_delivery_days  -- Ordena do mais rápido para o mais lento

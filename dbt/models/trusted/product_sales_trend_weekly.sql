@@ -20,7 +20,10 @@ Regras de negócio:
 - Ordenação por data e categoria
 */
 
-{{ config(materialized='table') }}
+{{ config(
+    materialized='table',
+    unique_key=['week_start', 'category']
+) }}
 
 -- CTE para extrair dados relevantes de vendas concluídas
 with sales as (
@@ -30,6 +33,7 @@ with sales as (
         total_amount                        -- Valor total da venda
     from {{ source('stage', 'carts') }}
     where lower(status) = 'delivered'       -- Filtra apenas vendas entregues
+    and items_product_id is not null        -- Garante integridade referencial
 ),
 
 -- CTE para obter categorias dos produtos
@@ -38,6 +42,7 @@ products as (
         id,
         category
     from {{ source('stage', 'products') }}
+    where category is not null              -- Garante integridade dos dados
 ),
 
 -- Combina dados de vendas com categorias dos produtos
@@ -47,7 +52,7 @@ sales_with_category as (
         p.category,
         s.total_amount
     from sales s
-    join products p on s.items_product_id = p.id
+    inner join products p on s.items_product_id = p.id  -- Inner join para garantir correspondência
 ),
 
 -- Agrega vendas por semana e categoria
