@@ -5,12 +5,20 @@ import logging
 from datetime import datetime
 from airflow.hooks.postgres_hook import PostgresHook
 
+# Configuração do logger para o módulo
 logger = logging.getLogger(__name__)
 
 def load_stage_config():
     """
     Carrega a configuração dos endpoints para a camada Stage.
-    Assume que o arquivo stage_config.yaml está na pasta config no nível raiz (AIRFLOW_HOME/config).
+    
+    Busca o arquivo stage_config.yaml na pasta config do AIRFLOW_HOME.
+    
+    Returns:
+        dict: Configurações dos endpoints para stage
+        
+    Raises:
+        FileNotFoundError: Se o arquivo de configuração não for encontrado
     """
     airflow_home = os.environ.get('AIRFLOW_HOME', '/opt/airflow')
     config_path = os.path.join(airflow_home, 'config', 'stage_config.yaml')
@@ -20,13 +28,22 @@ def load_stage_config():
 
 def flatten_json(y, parent_key='', sep='_'):
     """
-    Achata um dicionário aninhado.
+    Achata um dicionário aninhado em um dicionário plano.
     
-    - Se encontrar um dicionário, concatena as chaves com o separador.
-    - Se encontrar uma lista:
-       * Se todos os itens forem dicionários, une as chaves de todos os itens e as adiciona com o prefixo (sem índice).
-       * Se forem valores simples, junta-os em uma única string separada por vírgula.
-       * Caso misto ou vazio, armazena a lista como string.
+    Regras de achatamento:
+    1. Dicionários aninhados: concatena as chaves com o separador
+    2. Listas:
+        - Se todos os itens forem dicionários: une as chaves de todos os itens
+        - Se todos os itens forem valores simples: junta em string com vírgulas
+        - Caso contrário: converte para string
+    
+    Args:
+        y: Dicionário ou valor a ser achatado
+        parent_key: Chave pai para concatenação (default: '')
+        sep: Separador usado na concatenação de chaves (default: '_')
+        
+    Returns:
+        dict: Dicionário achatado
     """
     items = {}
     if isinstance(y, dict):
@@ -56,9 +73,24 @@ def flatten_json(y, parent_key='', sep='_'):
 
 def infer_sql_type(value):
     """
-    Infere um tipo SQL simples baseado no valor.
-    Se a string não iniciar com dígito, força TEXT.
-    Se iniciar com dígito, tenta convertê-la via datetime.fromisoformat para TIMESTAMP.
+    Infere o tipo SQL apropriado baseado no valor fornecido.
+    
+    Regras de inferência:
+    1. None -> TEXT
+    2. int -> INTEGER
+    3. float -> DECIMAL(20,6)
+    4. str:
+        - Se não começa com dígito -> TEXT
+        - Se é data ISO -> TIMESTAMP
+        - Se é número inteiro -> INTEGER
+        - Se é decimal -> DECIMAL(20,6)
+        - Caso contrário -> TEXT
+        
+    Args:
+        value: Valor para inferir o tipo
+        
+    Returns:
+        str: Tipo SQL inferido
     """
     if value is None:
         return "TEXT"
@@ -87,7 +119,14 @@ def infer_sql_type(value):
 
 def get_existing_columns(table, postgres_conn_id='ecommerce'):
     """
-    Retorna o conjunto de nomes de colunas existentes na tabela.
+    Obtém o conjunto de colunas existentes em uma tabela PostgreSQL.
+    
+    Args:
+        table: Nome da tabela no formato schema.table
+        postgres_conn_id: ID da conexão Airflow com PostgreSQL
+        
+    Returns:
+        set: Conjunto com nomes das colunas existentes
     """
     pg_hook = PostgresHook(postgres_conn_id=postgres_conn_id)
     conn = pg_hook.get_conn()
@@ -101,7 +140,14 @@ def get_existing_columns(table, postgres_conn_id='ecommerce'):
 
 def get_existing_columns_info(table, postgres_conn_id='ecommerce'):
     """
-    Retorna um dicionário com o nome da coluna e seu data_type.
+    Obtém informações sobre as colunas existentes em uma tabela PostgreSQL.
+    
+    Args:
+        table: Nome da tabela no formato schema.table
+        postgres_conn_id: ID da conexão Airflow com PostgreSQL
+        
+    Returns:
+        dict: Dicionário com nome da coluna como chave e tipo de dados como valor
     """
     pg_hook = PostgresHook(postgres_conn_id=postgres_conn_id)
     conn = pg_hook.get_conn()
@@ -115,12 +161,20 @@ def get_existing_columns_info(table, postgres_conn_id='ecommerce'):
 
 def types_match(current_type, expected_type):
     """
-    Compara o tipo atual (do information_schema) com o tipo esperado (inferido).
-    Normaliza para comparação:
-      - DECIMAL/Numeric => "numeric"
-      - TIMESTAMP => "timestamp"
-      - INTEGER => "integer"
-      - TEXT => "text"
+    Verifica se dois tipos SQL são compatíveis.
+    
+    Normaliza os tipos para comparação:
+    - DECIMAL/Numeric -> numeric
+    - TIMESTAMP -> timestamp
+    - INTEGER -> integer
+    - TEXT -> text
+    
+    Args:
+        current_type: Tipo atual da coluna
+        expected_type: Tipo esperado/inferido
+        
+    Returns:
+        bool: True se os tipos são compatíveis, False caso contrário
     """
     expected_type = expected_type.lower()
     if expected_type.startswith("decimal") or expected_type.startswith("numeric"):
@@ -147,8 +201,13 @@ def types_match(current_type, expected_type):
 
 def update_column_type_if_needed(table, column, sample_value, postgres_conn_id='ecommerce'):
     """
-    Se o tipo atual da coluna não corresponder ao tipo inferido para sample_value,
-    executa um ALTER TABLE para atualizar o tipo da coluna.
+    Atualiza o tipo de uma coluna se necessário.
+    
+    Args:
+        table: Nome da tabela no formato schema.table
+        column: Nome da coluna a ser atualizada
+        sample_value: Valor de exemplo para inferir o novo tipo
+        postgres_conn_id: ID da conexão Airflow com PostgreSQL
     """
     expected_type = infer_sql_type(sample_value)
     if expected_type.upper().startswith("DECIMAL"):
@@ -171,9 +230,19 @@ def update_column_type_if_needed(table, column, sample_value, postgres_conn_id='
 
 def create_table(table, columns, postgres_conn_id='ecommerce'):
     """
-    Cria a tabela com as colunas fornecidas.
-    Se a coluna 'id' estiver presente, ela será definida como PRIMARY KEY.
-    Também adiciona as colunas de controle: etl_load_date (TIMESTAMP), source_file (TEXT) e etl_run_id (TEXT).
+    Cria uma nova tabela no PostgreSQL.
+    
+    Características:
+    - Coluna 'id' é definida como PRIMARY KEY se presente
+    - Adiciona colunas de controle ETL:
+        * etl_load_date (TIMESTAMP)
+        * source_file (TEXT)
+        * etl_run_id (TEXT)
+        
+    Args:
+        table: Nome da tabela no formato schema.table
+        columns: Dicionário com nome e valor exemplo das colunas
+        postgres_conn_id: ID da conexão Airflow com PostgreSQL
     """
     # Adiciona colunas de controle se não existirem
     if 'etl_load_date' not in columns:
@@ -200,7 +269,13 @@ def create_table(table, columns, postgres_conn_id='ecommerce'):
 
 def alter_table_add_column(table, column, sample_value, postgres_conn_id='ecommerce'):
     """
-    Adiciona uma coluna à tabela.
+    Adiciona uma nova coluna à tabela existente.
+    
+    Args:
+        table: Nome da tabela no formato schema.table
+        column: Nome da nova coluna
+        sample_value: Valor de exemplo para inferir o tipo
+        postgres_conn_id: ID da conexão Airflow com PostgreSQL
     """
     col_type = infer_sql_type(sample_value)
     alter_sql = f"ALTER TABLE {table} ADD COLUMN {column} {col_type};"
@@ -213,7 +288,15 @@ def alter_table_add_column(table, column, sample_value, postgres_conn_id='ecomme
 
 def insert_rows_ignore_conflict(table, rows, target_fields, postgres_conn_id='ecommerce'):
     """
-    Insere os registros na tabela usando ON CONFLICT (id) DO NOTHING para evitar erros de duplicidade.
+    Insere registros na tabela ignorando conflitos de chave primária.
+    
+    Usa ON CONFLICT (id) DO NOTHING para evitar erros de duplicidade.
+    
+    Args:
+        table: Nome da tabela no formato schema.table
+        rows: Lista de tuplas com os valores a serem inseridos
+        target_fields: Lista com nomes das colunas na ordem dos valores
+        postgres_conn_id: ID da conexão Airflow com PostgreSQL
     """
     if not rows:
         return
@@ -229,30 +312,45 @@ def insert_rows_ignore_conflict(table, rows, target_fields, postgres_conn_id='ec
 
 def process_endpoint(endpoint: str, raw_file_path: str, stage_config: dict, **context) -> dict:
     """
-    Processa um endpoint:
-      1. Lê o arquivo RAW.
-      2. Achata cada registro (explodindo JSON e listas).
-      3. Adiciona colunas de controle (etl_load_date, source_file, etl_run_id).
-      4. Cria ou altera a tabela dinamicamente para incluir todas as colunas encontradas,
-         atualizando o tipo de coluna se necessário.
-      5. Insere os registros (ignorando duplicatas na chave primária).
-      
-    Retorna um dicionário com informações do processamento.
+    Processa um endpoint carregando dados da camada Raw para Stage.
+    
+    Fluxo de processamento:
+    1. Lê arquivo JSON da camada Raw
+    2. Achata registros aninhados
+    3. Adiciona colunas de controle ETL
+    4. Cria/altera tabela conforme necessário
+    5. Insere registros ignorando duplicatas
+    
+    Args:
+        endpoint: Nome do endpoint sendo processado
+        raw_file_path: Caminho do arquivo JSON na camada Raw
+        stage_config: Configurações de stage dos endpoints
+        **context: Contexto do Airflow
+        
+    Returns:
+        dict: Estatísticas do processamento (tabela e registros inseridos)
+        
+    Raises:
+        Exception: Se configuração do endpoint não for encontrada
     """
+    # Lê dados do arquivo Raw
     with open(raw_file_path, 'r') as f:
         raw_data = json.load(f)
     
+    # Prepara estruturas de controle
     flattened_records = []
     union_keys = set()
-    sample_values = {}  # Para inferir os tipos
+    sample_values = {}  # Para inferência de tipos
     
+    # Dados de controle ETL
     etl_load_date = datetime.now().isoformat()
     source_file = os.path.basename(raw_file_path)
     etl_run_id = context.get("dag_run").run_id if context.get("dag_run") else "unknown"
     
+    # Processa cada registro
     for rec in raw_data:
         flat_rec = flatten_json(rec)
-        # Adiciona os controles
+        # Adiciona campos de controle
         flat_rec['etl_load_date'] = etl_load_date
         flat_rec['source_file'] = source_file
         flat_rec['etl_run_id'] = etl_run_id
@@ -264,13 +362,13 @@ def process_endpoint(endpoint: str, raw_file_path: str, stage_config: dict, **co
     
     union_keys = sorted(list(union_keys))
     
-    # Obtém o nome da tabela a partir da configuração
+    # Obtém configuração da tabela
     endpoint_config = stage_config.get(endpoint)
     if not endpoint_config:
         raise Exception(f"Stage config para {endpoint} não encontrada")
     table = endpoint_config['table']
     
-    # Verifica se a tabela existe; se não, cria-a; se sim, adiciona novas colunas ou atualiza tipos se necessário
+    # Verifica/cria/altera tabela
     pg_hook = PostgresHook(postgres_conn_id='ecommerce')
     conn = pg_hook.get_conn()
     cursor = conn.cursor()
@@ -282,9 +380,11 @@ def process_endpoint(endpoint: str, raw_file_path: str, stage_config: dict, **co
     exists = cursor.fetchone()[0]
     
     if not exists:
+        # Cria nova tabela
         columns_with_sample = {k: sample_values.get(k) for k in union_keys}
         create_table(table, columns_with_sample)
     else:
+        # Atualiza estrutura existente
         existing_columns_info = get_existing_columns_info(table)
         for key in union_keys:
             if key not in existing_columns_info:
@@ -295,7 +395,7 @@ def process_endpoint(endpoint: str, raw_file_path: str, stage_config: dict, **co
                 if not types_match(current_type, expected_type):
                     update_column_type_if_needed(table, key, sample_values.get(key))
     
-    # Prepara as linhas para inserção, garantindo a presença de todas as colunas
+    # Prepara registros para inserção
     rows = []
     for rec in flattened_records:
         row = []
@@ -303,6 +403,7 @@ def process_endpoint(endpoint: str, raw_file_path: str, stage_config: dict, **co
             row.append(rec.get(key))
         rows.append(tuple(row))
     
+    # Insere registros
     try:
         insert_rows_ignore_conflict(table, rows, union_keys)
         logger.info("Inseridos %d registros na tabela %s", len(rows), table)
