@@ -62,7 +62,7 @@ cd airflow-engineering-challenge
 
 Construa e inicie os serviços:
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
 Verifique os containers:
