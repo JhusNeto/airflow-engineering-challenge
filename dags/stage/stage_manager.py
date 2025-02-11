@@ -67,7 +67,7 @@ def infer_sql_type(value):
     if isinstance(value, float):
         return "DECIMAL(20,6)"
     if isinstance(value, str):
-        # Se a string não inicia com dígito, assume TEXT.
+        # Se a string não começar com dígito, consideramos TEXT.
         if not value[0].isdigit():
             return "TEXT"
         try:
@@ -115,9 +115,9 @@ def get_existing_columns_info(table, postgres_conn_id='ecommerce'):
 
 def types_match(current_type, expected_type):
     """
-    Compara o tipo atual (retornado pelo information_schema) com o tipo esperado (inferido).
-    Normaliza para comparar:
-      - DECIMAL / NUMERIC => "numeric"
+    Compara o tipo atual (do information_schema) com o tipo esperado (inferido).
+    Normaliza para comparação:
+      - DECIMAL/Numeric => "numeric"
       - TIMESTAMP => "timestamp"
       - INTEGER => "integer"
       - TEXT => "text"
@@ -151,7 +151,6 @@ def update_column_type_if_needed(table, column, sample_value, postgres_conn_id='
     executa um ALTER TABLE para atualizar o tipo da coluna.
     """
     expected_type = infer_sql_type(sample_value)
-    # Mapeia para um tipo-alvo aceitável no ALTER TABLE
     if expected_type.upper().startswith("DECIMAL"):
         target_type = "numeric"
     elif expected_type.upper().startswith("TIMESTAMP"):
@@ -173,9 +172,17 @@ def update_column_type_if_needed(table, column, sample_value, postgres_conn_id='
 def create_table(table, columns, postgres_conn_id='ecommerce'):
     """
     Cria a tabela com as colunas fornecidas.
-    `columns` é um dicionário onde a chave é o nome da coluna e o valor é um exemplo para inferir o tipo.
     Se a coluna 'id' estiver presente, ela será definida como PRIMARY KEY.
+    Também adiciona as colunas de controle: etl_load_date (TIMESTAMP), source_file (TEXT) e etl_run_id (TEXT).
     """
+    # Adiciona colunas de controle se não existirem
+    if 'etl_load_date' not in columns:
+        columns['etl_load_date'] = datetime.now().isoformat()
+    if 'source_file' not in columns:
+        columns['source_file'] = 'unknown'
+    if 'etl_run_id' not in columns:
+        columns['etl_run_id'] = 'unknown'
+        
     col_defs = []
     for col, sample_value in columns.items():
         col_type = infer_sql_type(sample_value)
@@ -220,14 +227,15 @@ def insert_rows_ignore_conflict(table, rows, target_fields, postgres_conn_id='ec
     cursor.executemany(sql, rows)
     conn.commit()
 
-def process_endpoint(endpoint: str, raw_file_path: str, stage_config: dict) -> dict:
+def process_endpoint(endpoint: str, raw_file_path: str, stage_config: dict, **context) -> dict:
     """
     Processa um endpoint:
       1. Lê o arquivo RAW.
       2. Achata cada registro (explodindo JSON e listas).
-      3. Cria ou altera a tabela dinamicamente para incluir todas as colunas encontradas,
+      3. Adiciona colunas de controle (etl_load_date, source_file, etl_run_id).
+      4. Cria ou altera a tabela dinamicamente para incluir todas as colunas encontradas,
          atualizando o tipo de coluna se necessário.
-      4. Insere os registros (ignorando duplicatas na chave primária).
+      5. Insere os registros (ignorando duplicatas na chave primária).
       
     Retorna um dicionário com informações do processamento.
     """
@@ -238,8 +246,16 @@ def process_endpoint(endpoint: str, raw_file_path: str, stage_config: dict) -> d
     union_keys = set()
     sample_values = {}  # Para inferir os tipos
     
+    etl_load_date = datetime.now().isoformat()
+    source_file = os.path.basename(raw_file_path)
+    etl_run_id = context.get("dag_run").run_id if context.get("dag_run") else "unknown"
+    
     for rec in raw_data:
         flat_rec = flatten_json(rec)
+        # Adiciona os controles
+        flat_rec['etl_load_date'] = etl_load_date
+        flat_rec['source_file'] = source_file
+        flat_rec['etl_run_id'] = etl_run_id
         flattened_records.append(flat_rec)
         for k, v in flat_rec.items():
             union_keys.add(k)
