@@ -38,7 +38,3 @@ logs/
 
 # Ignore local_storage directories
 local_storage/*/
-
-# Ignore some dbt directories
-dbt/target/
-dbt/logs/
