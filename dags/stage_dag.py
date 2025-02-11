@@ -1,5 +1,6 @@
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+from airflow.sensors.external_task import ExternalTaskSensor
 from datetime import datetime, timedelta
 import logging
 
@@ -44,6 +45,16 @@ with DAG(
     tags=['stage', 'transform', 'ecommerce']
 ) as dag:
 
+    # Sensor para aguardar a conclusão da DAG de extração
+    wait_for_extract = ExternalTaskSensor(
+        task_id='wait_for_extract_dag',
+        external_dag_id='extract_data_dag',
+        external_task_id=None,  # None significa aguardar a DAG inteira
+        timeout=600,  # timeout de 10 minutos
+        poke_interval=30,  # verifica a cada 30 segundos
+        mode='poke'
+    )
+
     endpoints = ['carts', 'customers', 'logistics', 'products']
 
     tasks = {}
@@ -55,3 +66,6 @@ with DAG(
             provide_context=True
         )
         tasks[ep] = task
+        
+        # Define a dependência: wait_for_extract >> process_endpoint
+        wait_for_extract >> task
