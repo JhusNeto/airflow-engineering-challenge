@@ -1,0 +1,118 @@
+version: 2
+
+models:
+  - name: customer_rfm
+    description: "Análise RFM (Recency, Frequency, Monetary) dos clientes"
+    config:
+      tags: ['rfm', 'customer_analytics']
+    columns:
+      - name: customer_id
+        description: "ID único do cliente"
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: source('stage', 'customers')
+              field: id
+      - name: full_name
+        description: "Nome completo do cliente"
+        tests:
+          - not_null
+          - relationships:
+              to: source('stage', 'customers')
+              field: full_name
+      - name: email
+        description: "Email do cliente"
+        tests:
+          - not_null
+          - relationships:
+              to: source('stage', 'customers')
+              field: email
+      - name: recency
+        description: "Dias desde a última compra"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: frequency
+        description: "Número total de compras"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 1"
+      - name: monetary
+        description: "Valor total gasto pelo cliente"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+
+  - name: logistics_performance
+    description: "Métricas de desempenho logístico"
+    config:
+      tags: ['logistics', 'performance']
+    columns:
+      - name: logistic_id
+        description: "ID único da transportadora"
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: source('stage', 'logistics')
+              field: id
+      - name: company_name
+        description: "Nome da transportadora"
+        tests:
+          - not_null
+          - relationships:
+              to: source('stage', 'logistics')
+              field: company_name
+      - name: service_type
+        description: "Tipo de serviço da transportadora"
+        tests:
+          - not_null
+          - relationships:
+              to: source('stage', 'logistics')
+              field: service_type
+      - name: avg_delivery_days
+        description: "Tempo médio de entrega em dias"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: num_shipments
+        description: "Total de entregas realizadas"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+
+  - name: product_sales_trend_weekly
+    description: "Tendência semanal de vendas por produto"
+    config:
+      tags: ['sales', 'products', 'trends']
+    columns:
+      - name: week_start
+        description: "Data de início da semana"
+        tests:
+          - not_null
+      - name: category
+        description: "Categoria do produto"
+        tests:
+          - not_null
+          - relationships:
+              to: source('stage', 'products')
+              field: category
+      - name: total_weekly_sales
+        description: "Total vendido na semana"
+        tests:
+          - not_null
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: prev_week_sales
+        description: "Total vendido na semana anterior"
+        tests:
+          - dbt_utils.expression_is_true:
+              expression: ">= 0"
+      - name: pct_change
+        description: "Variação percentual em relação à semana anterior"
