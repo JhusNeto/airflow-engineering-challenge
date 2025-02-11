@@ -14,8 +14,8 @@ Fluxo principal:
 3. Monitora validade e renova automaticamente
 4. Em caso de falha no refresh, volta para autenticação inicial
 
-Autor: [Seu Nome]
-Data: [Data Atual]
+Autor: Juscelino Barbosa da Silva Neto
+Data: 11/02/2025
 """
 
 from airflow import DAG
