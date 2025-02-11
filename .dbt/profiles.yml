@@ -1,0 +1,12 @@
+airflow_dbt_profile:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      threads: 1
+      host: postgresdb
+      port: 5432
+      user: postgres
+      pass: postgres
+      dbname: ecommerce
+      schema: trusted

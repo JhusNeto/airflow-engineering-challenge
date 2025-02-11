@@ -1,0 +1,12 @@
+name: airflow_dbt_project
+version: '1.0'
+config-version: 2
+
+profile: airflow_dbt_profile
+
+source-paths: ["models"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_modules"

@@ -1,0 +1,11 @@
+version: 2
+
+sources:
+  - name: stage
+    database: ecommerce
+    schema: stage
+    tables:
+      - name: carts
+      - name: products
+      - name: logistics
+      - name: customers
